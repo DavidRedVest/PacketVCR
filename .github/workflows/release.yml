@@ -52,39 +52,27 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgl1-mesa-dev libxkbcommon-dev
 
-      # GitHub's macos-latest image ships an Xcode whose macOS SDK dropped
-      # AGL.framework (removed since ~Xcode 15 / macOS 14 SDK). Qt6's
-      # prebuilt macOS package still links QtGui against "-framework AGL"
-      # unconditionally, so linking video_tools_gui fails with
-      # "ld: framework 'AGL' not found" unless we point at an older Xcode
-      # whose SDK still has it. GitHub's macOS runners normally keep several
-      # Xcode versions side by side under /Applications, so pick whichever
-      # one still has AGL.framework instead of hardcoding a version number
-      # that will eventually be removed from the image.
-      - name: Select an Xcode toolchain with AGL.framework (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          agl_xcode=""
-          for dev in /Applications/Xcode*.app/Contents/Developer; do
-            sdk="$dev/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
-            if [ -e "$sdk/System/Library/Frameworks/AGL.framework" ]; then
-              agl_xcode="$dev"
-              break
-            fi
-          done
-          if [ -z "$agl_xcode" ]; then
-            echo "::error::No installed Xcode on this runner ships AGL.framework anymore (see QTBUG-114891). Qt6's macOS build needs it until this is fixed upstream."
-            exit 1
-          fi
-          echo "Selecting $agl_xcode (has AGL.framework)"
-          sudo xcode-select -s "$agl_xcode"
-          xcodebuild -version
-
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
           version: ${{ env.QT_VERSION }}
           cache: true
+
+      # Qt 6.8.3's macOS package still lists the long-removed AGL.framework
+      # as a required link dependency in its .prl metadata (the file CMake
+      # reads to know what consumers of Qt6::Gui/Qt6::Widgets must link
+      # against), even though nothing in Qt6 or this app actually calls
+      # into it -- it's dead weight left over from how Qt's own release was
+      # built. GitHub's macos-latest image no longer ships any Xcode with
+      # AGL.framework in its SDK (removed in Xcode 15+), so linking
+      # video_tools_gui fails with "ld: framework 'AGL' not found" unless
+      # this stale requirement is stripped from Qt's metadata first.
+      - name: Strip obsolete AGL.framework dependency from Qt (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          qt_root="${QT_ROOT_DIR:-$(dirname "$(dirname "$(dirname "$Qt6_DIR")")")}"
+          echo "Patching *.prl files under $qt_root"
+          find "$qt_root" -name "*.prl" -print0 | xargs -0 sed -i '' -E 's/-framework AGL;?//g'
 
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
