@@ -33,7 +33,12 @@ jobs:
             name: windows
           - os: macos-latest
             name: macos
-          - os: ubuntu-latest
+          # Pinned (not ubuntu-latest): linuxdeployqt refuses to run on a
+          # glibc newer than Ubuntu 22.04 Jammy's (2.35), by design -- see
+          # https://github.com/probonopd/linuxdeployqt/issues/340. Once
+          # ubuntu-latest moves past 24.04 this still needs to stay pinned
+          # to whatever the oldest still-supported LTS is.
+          - os: ubuntu-22.04
             name: linux
 
     runs-on: ${{ matrix.os }}
@@ -42,10 +47,38 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Linux build dependencies
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgl1-mesa-dev libxkbcommon-dev
+
+      # GitHub's macos-latest image ships an Xcode whose macOS SDK dropped
+      # AGL.framework (removed since ~Xcode 15 / macOS 14 SDK). Qt6's
+      # prebuilt macOS package still links QtGui against "-framework AGL"
+      # unconditionally, so linking video_tools_gui fails with
+      # "ld: framework 'AGL' not found" unless we point at an older Xcode
+      # whose SDK still has it. GitHub's macOS runners normally keep several
+      # Xcode versions side by side under /Applications, so pick whichever
+      # one still has AGL.framework instead of hardcoding a version number
+      # that will eventually be removed from the image.
+      - name: Select an Xcode toolchain with AGL.framework (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          agl_xcode=""
+          for dev in /Applications/Xcode*.app/Contents/Developer; do
+            sdk="$dev/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
+            if [ -e "$sdk/System/Library/Frameworks/AGL.framework" ]; then
+              agl_xcode="$dev"
+              break
+            fi
+          done
+          if [ -z "$agl_xcode" ]; then
+            echo "::error::No installed Xcode on this runner ships AGL.framework anymore (see QTBUG-114891). Qt6's macOS build needs it until this is fixed upstream."
+            exit 1
+          fi
+          echo "Selecting $agl_xcode (has AGL.framework)"
+          sudo xcode-select -s "$agl_xcode"
+          xcodebuild -version
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -75,7 +108,7 @@ jobs:
         run: macdeployqt dist/PacketVCR.app
 
       - name: Bundle Qt runtime (Linux)
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-22.04'
         run: |
           wget -c -nv "https://github.com/probonopd/linuxdeployqt/releases/download/continuous/linuxdeployqt-continuous-x86_64.AppImage" -O linuxdeployqt.AppImage
           chmod +x linuxdeployqt.AppImage
