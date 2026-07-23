@@ -58,24 +58,39 @@ jobs:
           version: ${{ env.QT_VERSION }}
           cache: true
 
-      # Qt 6.8.3's macOS package still lists the long-removed AGL.framework
-      # as a required link dependency in its .prl metadata (the file CMake
-      # reads to know what consumers of Qt6::Gui/Qt6::Widgets must link
-      # against), even though nothing in Qt6 or this app actually calls
-      # into it -- it's dead weight left over from how Qt's own release was
-      # built. GitHub's macos-latest image no longer ships any Xcode with
-      # AGL.framework in its SDK (removed in Xcode 15+), so linking
-      # video_tools_gui fails with "ld: framework 'AGL' not found" unless
-      # this stale requirement is stripped from Qt's metadata first.
-      - name: Strip obsolete AGL.framework dependency from Qt (macOS)
+      # Qt's cmake/Qt6/FindWrapOpenGL.cmake re-detects OpenGL at *consumer*
+      # configure time (not baked in when Qt itself was built), and on this
+      # runner's Qt 6.8.3 build that logic still unconditionally appends
+      # "-framework AGL" for any target linking Qt6::Gui/Qt6::Widgets.
+      # GitHub's macos-latest image no longer ships any Xcode whose SDK has
+      # AGL.framework (removed in Xcode 15+), so linking video_tools_gui
+      # fails with "ld: framework 'AGL' not found". A stub AGL.framework
+      # (a plain empty dylib, on a custom -F search path) satisfies the
+      # linker at build time; this is safe at runtime too, since real Macs
+      # still resolve /System/Library/Frameworks/AGL.framework/AGL through
+      # dyld's shared cache for backward compatibility even though the SDK
+      # dropped the on-disk stub used for linking -- this is the same
+      # mechanism that lets Qt's own prebuilt AGL-linked binaries keep
+      # working on current macOS.
+      - name: Provide a stub AGL.framework for the linker (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          qt_root="${QT_ROOT_DIR:-$(dirname "$(dirname "$(dirname "$Qt6_DIR")")")}"
-          echo "Patching *.prl files under $qt_root"
-          find "$qt_root" -name "*.prl" -print0 | xargs -0 sed -i '' -E 's/-framework AGL;?//g'
+          set -e
+          stub_dir="$RUNNER_TEMP/agl_stub"
+          mkdir -p "$stub_dir/AGL.framework"
+          echo 'int __agl_stub_unused = 0;' > "$RUNNER_TEMP/agl_stub.c"
+          clang -dynamiclib -o "$stub_dir/AGL.framework/AGL" "$RUNNER_TEMP/agl_stub.c" \
+            -install_name /System/Library/Frameworks/AGL.framework/AGL
+          echo "AGL_STUB_DIR=$stub_dir" >> "$GITHUB_ENV"
 
       - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        shell: bash
+        run: |
+          extra_flags=""
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            extra_flags="-DCMAKE_EXE_LINKER_FLAGS=-F${AGL_STUB_DIR}"
+          fi
+          cmake -B build -DCMAKE_BUILD_TYPE=Release $extra_flags
 
       - name: Build
         run: cmake --build build --config Release --parallel
