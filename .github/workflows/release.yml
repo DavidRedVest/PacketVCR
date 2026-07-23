@@ -1,8 +1,15 @@
 name: Release
 
 # Runs on every push/PR (build-only, for CI validation) and, when a tag
-# matching v*.*.* is pushed, additionally publishes a GitHub Release with a
-# packaged, ready-to-run archive for each platform.
+# matching v*.*.* is pushed, additionally publishes a GitHub Release.
+#
+# The three platforms are built on their own native runner (Windows can't
+# produce a macOS/Linux binary and vice versa), but the "package" job below
+# merges all three outputs into a single downloadable folder:
+#   PacketVCR/
+#     windows/   PacketVCR.exe, recorder_cli.exe, player_cli.exe, Qt DLLs
+#     macos/     PacketVCR.app, recorder_cli, player_cli
+#     linux/     PacketVCR, recorder_cli, player_cli, bundled .so libs
 on:
   push:
     branches: [main, master]
@@ -61,7 +68,7 @@ jobs:
       - name: Bundle Qt runtime (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
-        run: windeployqt --release dist\bin\PacketVCR.exe
+        run: windeployqt --release dist\PacketVCR.exe
 
       - name: Bundle Qt runtime (macOS)
         if: matrix.os == 'macos-latest'
@@ -74,40 +81,66 @@ jobs:
           chmod +x linuxdeployqt.AppImage
           # Extract instead of running the AppImage directly: CI runners don't have FUSE.
           ./linuxdeployqt.AppImage --appimage-extract
-          ./squashfs-root/AppRun dist/bin/PacketVCR -bundle-non-qt-libs -no-translations
+          ./squashfs-root/AppRun dist/PacketVCR -bundle-non-qt-libs -no-translations
 
-      - name: Package (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: Compress-Archive -Path dist\* -DestinationPath PacketVCR-windows.zip
+      - name: Ensure executables are marked executable (macOS/Linux)
+        if: matrix.os != 'windows-latest'
+        run: |
+          chmod +x dist/PacketVCR.app/Contents/MacOS/PacketVCR 2>/dev/null || true
+          chmod +x dist/PacketVCR 2>/dev/null || true
+          chmod +x dist/recorder_cli dist/player_cli
 
-      - name: Package (macOS)
-        if: matrix.os == 'macos-latest'
-        run: (cd dist && zip -r ../PacketVCR-macos.zip .)
-
-      - name: Package (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: (cd dist && tar -czf ../PacketVCR-linux.tar.gz .)
-
-      - name: Upload artifact
+      # Upload the raw staged folder (no zipping here) -- the "package" job
+      # below merges all three platforms' folders into one download.
+      - name: Upload platform folder
         uses: actions/upload-artifact@v4
         with:
-          name: PacketVCR-${{ matrix.name }}
-          path: PacketVCR-${{ matrix.name }}.*
+          name: ${{ matrix.name }}
+          path: dist/
+          if-no-files-found: error
+
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      # No `name:` given -> downloads every artifact, each into its own
+      # subfolder named after the artifact (windows/macos/linux). This is
+      # exactly the "one folder, one subfolder per platform" layout.
+      - name: Download all platform folders
+        uses: actions/download-artifact@v4
+        with:
+          path: PacketVCR
+
+      - name: Re-apply executable permissions
+        run: |
+          find PacketVCR -type f \( -name "PacketVCR" -o -name "recorder_cli" -o -name "player_cli" \) -exec chmod +x {} +
+          find PacketVCR -path "*/PacketVCR.app/Contents/MacOS/PacketVCR" -exec chmod +x {} +
+
+      - name: List contents
+        run: find PacketVCR -maxdepth 2
+
+      - name: Zip combined package
+        run: (cd PacketVCR && zip -r ../PacketVCR.zip .)
+
+      - name: Upload combined artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PacketVCR-all-platforms
+          path: PacketVCR.zip
           if-no-files-found: error
 
   release:
-    needs: build
+    needs: package
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          name: PacketVCR-all-platforms
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*
+          files: PacketVCR.zip
           draft: false
           generate_release_notes: true

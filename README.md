@@ -27,12 +27,21 @@ GitHub Actions 会在 Windows / macOS / Linux 三个平台上原生编译并打�
 可执行文件（GUI 已用 `windeployqt`/`macdeployqt`/`linuxdeployqt` 打包好 Qt 运行时，无需额外安装
 Qt）。
 
-- 打 tag（形如 `v1.0.0`）推送后，会自动在 [Releases](../../releases) 页面发布三个平台的压缩包：
-  `PacketVCR-windows.zip` / `PacketVCR-macos.zip` / `PacketVCR-linux.tar.gz`。
+- 打 tag（形如 `v1.0.0`）推送后，会自动在 [Releases](../../releases) 页面发布**一个** `PacketVCR.zip`，
+  解压后是这样的结构，三个平台的可执行文件分别放在各自子文件夹里：
+
+  ```
+  PacketVCR/
+    windows/   PacketVCR.exe  recorder_cli.exe  player_cli.exe  (+ 依赖的 Qt DLL)
+    macos/     PacketVCR.app  recorder_cli      player_cli
+    linux/     PacketVCR      recorder_cli      player_cli      (+ bundle 的 .so)
+  ```
+
+  只需要把对应平台的子文件夹拷到自己电脑上，双击 `PacketVCR`（Windows/macOS 是
+  `PacketVCR.exe`/`PacketVCR.app`）即可运行 GUI，或在终端里运行 `recorder_cli`/`player_cli`。
 - 每次 push / PR 也会触发同一套构建（不发布 Release，仅做 CI 验证），可在
-  [Actions](../../actions) 页面下载对应平台的 Artifact 试跑。
-- 包内包含 `PacketVCR`（GUI，macOS 上是 `PacketVCR.app`）以及 `recorder_cli` / `player_cli`
-  （Windows 上为 `.exe`）。
+  [Actions](../../actions) 对应 workflow run 里下载名为 `PacketVCR-all-platforms` 的 Artifact
+  试跑，内容和 Release 里的 `PacketVCR.zip` 一致。
 
 > Linux 的 Qt 运行时打包（`linuxdeployqt`）跨发行版兼容性不如 Windows/macOS 稳定，如果在某个
 > 发行版上启动报"找不到 Qt platform plugin xcb"之类的错误，通常是缺少 `libxcb-cursor0` 等系统库，

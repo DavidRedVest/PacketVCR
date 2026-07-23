@@ -21,6 +21,6 @@ set_target_properties(video_tools_gui PROPERTIES
 )
 
 install(TARGETS video_tools_gui
-    RUNTIME DESTINATION bin
+    RUNTIME DESTINATION .
     BUNDLE DESTINATION .
 )
