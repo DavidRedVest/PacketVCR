@@ -47,6 +47,15 @@ Qt）。
 > 发行版上启动报"找不到 Qt platform plugin xcb"之类的错误，通常是缺少 `libxcb-cursor0` 等系统库，
 > 装上对应发行版的包即可。
 
+> **macOS 提示"PacketVCR 已损坏，无法打开，你应该将它移到废纸篓"**：这不是文件真的损坏了，
+> 是 macOS Gatekeeper 的限制——`PacketVCR.app` 目前没有经过付费的 Apple 开发者证书签名/公证，
+> 从浏览器下载解压后会被打上"下载隔离"标记，未签名的 App 在较新 macOS 上会直接显示这种更吓人
+> 的提示，而不是可以选择"仍要打开"的提示。解决办法：打开终端执行
+> ```sh
+> xattr -cr /path/到/PacketVCR.app
+> ```
+> 清掉隔离标记后即可正常双击打开，这一步对每台第一次运行的 Mac 只需要做一次。
+
 ## 构建
 
 依赖 Qt6（Core / Network / Widgets / Test 组件）与 CMake ≥ 3.21。若 Qt6 未安装在默认搜索路径，
