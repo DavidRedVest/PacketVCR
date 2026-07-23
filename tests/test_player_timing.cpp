@@ -144,7 +144,13 @@ void TestPlayerTiming::pauseResumeShiftsTimingWithoutLoss() {
     player.pause();
     QVERIFY(player.isPaused());
     const auto pauseDurationMs = 300;
+    const auto pauseStart = std::chrono::steady_clock::now();
     std::this_thread::sleep_for(std::chrono::milliseconds(pauseDurationMs));
+    // sleep_for only guarantees *at least* pauseDurationMs -- on a loaded/virtualized
+    // CI machine it can overshoot well beyond that, so measure what actually elapsed
+    // rather than assuming the nominal value when computing the expected total below.
+    const auto actualPauseMs =
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - pauseStart).count();
     player.resume();
     QVERIFY(!player.isPaused());
 
@@ -158,7 +164,7 @@ void TestPlayerTiming::pauseResumeShiftsTimingWithoutLoss() {
 
     const auto actualTotalMs =
         std::chrono::duration_cast<std::chrono::milliseconds>(received.back().arrival - received.front().arrival).count();
-    const auto expectedTotalMs = static_cast<int64_t>(stepMs) * (count - 1) + pauseDurationMs;
+    const auto expectedTotalMs = static_cast<int64_t>(stepMs) * (count - 1) + actualPauseMs;
     QVERIFY2(std::llabs(actualTotalMs - expectedTotalMs) < 60,
              qPrintable(QString("expected ~%1ms (incl. pause), got %2ms").arg(expectedTotalMs).arg(actualTotalMs)));
 
