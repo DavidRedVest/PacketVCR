@@ -165,7 +165,12 @@ void TestPlayerTiming::pauseResumeShiftsTimingWithoutLoss() {
     const auto actualTotalMs =
         std::chrono::duration_cast<std::chrono::milliseconds>(received.back().arrival - received.front().arrival).count();
     const auto expectedTotalMs = static_cast<int64_t>(stepMs) * (count - 1) + actualPauseMs;
-    QVERIFY2(std::llabs(actualTotalMs - expectedTotalMs) < 60,
+    // Wider tolerance than the other timing tests: pause()/resume() add a
+    // cross-thread wakeup handoff (condition variable + deadline
+    // recompute) on top of ordinary packet-pacing jitter, and that handoff
+    // is visibly slower on loaded/virtualized CI runners than on a local
+    // dev machine (observed up to ~65ms there vs a few ms locally).
+    QVERIFY2(std::llabs(actualTotalMs - expectedTotalMs) < 150,
              qPrintable(QString("expected ~%1ms (incl. pause), got %2ms").arg(expectedTotalMs).arg(actualTotalMs)));
 
     QFile::remove(path);
