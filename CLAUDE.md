@@ -26,6 +26,10 @@ cmake --build build
 
 Targets produced: `recorder_cli`, `player_cli`, `video_tools_gui`, plus the test binaries below.
 
+`PACKETVCR_BUILD_GUI` and `PACKETVCR_BUILD_TESTS` (both default `ON`) gate whether Qt is required at
+all: with both `OFF`, `pcap`/`net`/`core`/`cli` build with zero Qt dependency and no
+`CMAKE_PREFIX_PATH` needed. Useful when iterating on core/CLI logic without a Qt install on hand.
+
 ## Test
 
 ```sh

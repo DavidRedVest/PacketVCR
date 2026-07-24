@@ -3,6 +3,7 @@
 #include "IPv4Address.h"
 
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <csignal>
 #include <cstdio>
@@ -24,6 +25,22 @@ uint32_t parseIPv4OrExit(const char* text) {
     }
     return ip;
 }
+
+uint16_t parsePortOrExit(const char* text) {
+    if (*text < '0' || *text > '9') {
+        std::fprintf(stderr, "invalid UDP port: %s\n", text);
+        std::exit(1);
+    }
+
+    char* end = nullptr;
+    errno = 0;
+    const unsigned long value = std::strtoul(text, &end, 10);
+    if (text == end || *end != '\0' || errno == ERANGE || value == 0 || value > 65535) {
+        std::fprintf(stderr, "invalid UDP port: %s\n", text);
+        std::exit(1);
+    }
+    return static_cast<uint16_t>(value);
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -37,7 +54,7 @@ int main(int argc, char** argv) {
 
     core::RecorderConfig config;
     config.bindOrGroupIp = parseIPv4OrExit(argv[1]);
-    config.port = static_cast<uint16_t>(std::atoi(argv[2]));
+    config.port = parsePortOrExit(argv[2]);
     config.outputPath = argv[3];
     config.localInterfaceIp = argc > 4 ? parseIPv4OrExit(argv[4]) : 0;
 

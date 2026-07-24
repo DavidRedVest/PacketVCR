@@ -152,6 +152,7 @@ void TestPcapRoundtrip::rejectsNonPcapFile() {
 
     pcap::PcapReader reader;
     QVERIFY(!reader.open(path.toStdString()));
+    QVERIFY(!reader.lastError().empty());
 
     QFile::remove(path);
 }

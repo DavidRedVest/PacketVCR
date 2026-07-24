@@ -50,6 +50,11 @@ public:
 
     bool isOpen() const { return file_.is_open(); }
 
+    // Empty when the last failed read was a clean EOF. Otherwise describes
+    // why open()/next()/nextPacket() failed.
+    const std::string& lastError() const { return lastError_; }
+    bool hasError() const { return !lastError_.empty(); }
+
     // Reads the next raw record. Returns false at EOF or on a truncated/
     // corrupt record (subsequent calls also return false).
     bool next(Record& out);
@@ -66,6 +71,7 @@ private:
     bool swapped_ = false;        // true if the file was written on a big-endian host (rare; we target LE only)
     bool nanoResolution_ = false; // true if the file uses nanosecond (vs. microsecond) timestamps
     bool eofOrError_ = false;
+    std::string lastError_;
 };
 
 } // namespace pcap

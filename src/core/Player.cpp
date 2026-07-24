@@ -35,7 +35,8 @@ bool Player::start(const PlayerConfig& config) {
 
     pcap::PcapReader reader;
     if (!reader.open(config.inputPath)) {
-        log("cannot open input file: " + config.inputPath);
+        const std::string reason = reader.lastError().empty() ? "cannot open file" : reader.lastError();
+        log("cannot open input file: " + config.inputPath + " (" + reason + ")");
         return false;
     }
 
@@ -52,6 +53,11 @@ bool Player::start(const PlayerConfig& config) {
         pp.offsetFromStart = std::chrono::duration_cast<std::chrono::microseconds>(pkt.timestamp - firstTs);
         pp.payload = std::move(pkt.payload);
         loaded.push_back(std::move(pp));
+    }
+    if (reader.hasError()) {
+        log("cannot read input file: " + config.inputPath + " (" + reader.lastError() + ")");
+        reader.close();
+        return false;
     }
     reader.close();
 

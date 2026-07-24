@@ -59,11 +59,19 @@ Qt）。
 
 ## 构建
 
-依赖 Qt6（Core / Network / Widgets / Test 组件）与 CMake ≥ 3.21。若 Qt6 未安装在默认搜索路径，
-需要通过 `-DCMAKE_PREFIX_PATH` 显式指定：
+默认构建 GUI 和测试，依赖 Qt6（Core / Widgets / Test 组件）与 CMake ≥ 3.21。若 Qt6 未安装在默认
+搜索路径，需要通过 `-DCMAKE_PREFIX_PATH` 显式指定：
 
 ```sh
 cmake -B build -DCMAKE_PREFIX_PATH=$HOME/Qt/6.8.3/macos
+cmake --build build
+```
+
+`pcap`/`net`/`core`/`cli` 几层完全不依赖 Qt（见下方架构说明），如果只需要命令行工具、不想装 Qt，
+可以关掉 GUI 和测试单独构建：
+
+```sh
+cmake -B build -DPACKETVCR_BUILD_GUI=OFF -DPACKETVCR_BUILD_TESTS=OFF
 cmake --build build
 ```
 

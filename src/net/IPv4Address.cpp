@@ -1,18 +1,39 @@
 #include "IPv4Address.h"
 
+#include <cerrno>
+#include <cstdlib>
 #include <cstdio>
 
 namespace net {
 
 bool parseIPv4(const std::string& text, uint32_t& outIp) {
-    unsigned a, b, c, d;
-    if (std::sscanf(text.c_str(), "%u.%u.%u.%u", &a, &b, &c, &d) != 4) {
-        return false;
+    uint32_t parts[4] = {0, 0, 0, 0};
+    const char* cursor = text.c_str();
+
+    for (int i = 0; i < 4; ++i) {
+        if (*cursor < '0' || *cursor > '9') {
+            return false;
+        }
+
+        char* end = nullptr;
+        errno = 0;
+        const unsigned long value = std::strtoul(cursor, &end, 10);
+        if (cursor == end || errno == ERANGE || value > 255) {
+            return false;
+        }
+        parts[i] = static_cast<uint32_t>(value);
+
+        if (i < 3) {
+            if (*end != '.') {
+                return false;
+            }
+            cursor = end + 1;
+        } else if (*end != '\0') {
+            return false;
+        }
     }
-    if (a > 255 || b > 255 || c > 255 || d > 255) {
-        return false;
-    }
-    outIp = (a << 24) | (b << 16) | (c << 8) | d;
+
+    outIp = (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3];
     return true;
 }
 

@@ -33,6 +33,8 @@ qt_add_executable(video_tools_gui ${video_tools_gui_sources})
 target_link_libraries(video_tools_gui PRIVATE video_tools_core Qt6::Widgets)
 
 set_target_properties(video_tools_gui PROPERTIES
+    AUTOMOC ON
+    AUTORCC ON
     OUTPUT_NAME "PacketVCR"
     WIN32_EXECUTABLE TRUE
     MACOSX_BUNDLE TRUE

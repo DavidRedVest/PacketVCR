@@ -3,7 +3,9 @@
 #include "IPv4Address.h"
 
 #include <atomic>
+#include <cerrno>
 #include <chrono>
+#include <cmath>
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -24,6 +26,33 @@ uint32_t parseIPv4OrExit(const char* text) {
     }
     return ip;
 }
+
+unsigned long parseUnsignedOrExit(const char* text, unsigned long minValue, unsigned long maxValue, const char* label) {
+    if (*text < '0' || *text > '9') {
+        std::fprintf(stderr, "invalid %s: %s\n", label, text);
+        std::exit(1);
+    }
+
+    char* end = nullptr;
+    errno = 0;
+    const unsigned long value = std::strtoul(text, &end, 10);
+    if (text == end || *end != '\0' || errno == ERANGE || value < minValue || value > maxValue) {
+        std::fprintf(stderr, "invalid %s: %s\n", label, text);
+        std::exit(1);
+    }
+    return value;
+}
+
+double parseSpeedOrExit(const char* text) {
+    char* end = nullptr;
+    errno = 0;
+    const double value = std::strtod(text, &end);
+    if (text == end || *end != '\0' || errno == ERANGE || !std::isfinite(value) || value <= 0.0) {
+        std::fprintf(stderr, "invalid speed multiplier: %s\n", text);
+        std::exit(1);
+    }
+    return value;
+}
 } // namespace
 
 int main(int argc, char** argv) {
@@ -38,10 +67,10 @@ int main(int argc, char** argv) {
     core::PlayerConfig config;
     config.inputPath = argv[1];
     config.destIp = parseIPv4OrExit(argv[2]);
-    config.destPort = static_cast<uint16_t>(std::atoi(argv[3]));
-    config.speedMultiplier = argc > 4 ? std::atof(argv[4]) : 1.0;
-    config.loop = argc > 5 ? std::atoi(argv[5]) != 0 : false;
-    config.multicastTtl = argc > 6 ? static_cast<uint8_t>(std::atoi(argv[6])) : 1;
+    config.destPort = static_cast<uint16_t>(parseUnsignedOrExit(argv[3], 1, 65535, "UDP port"));
+    config.speedMultiplier = argc > 4 ? parseSpeedOrExit(argv[4]) : 1.0;
+    config.loop = argc > 5 ? parseUnsignedOrExit(argv[5], 0, 1, "loop flag") != 0 : false;
+    config.multicastTtl = argc > 6 ? static_cast<uint8_t>(parseUnsignedOrExit(argv[6], 1, 255, "multicast TTL")) : 1;
 
     core::Player player;
     player.setLogCallback([](const std::string& msg) {
