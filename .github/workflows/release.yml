@@ -110,6 +110,23 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: macdeployqt dist/PacketVCR.app
 
+      # macdeployqt copies Qt's own already-signed frameworks into the
+      # bundle and rewrites the executable's load commands to point at
+      # them; both of those edits invalidate the ad-hoc signature the
+      # linker attached automatically, leaving an *invalid* (not just
+      # missing) code signature. macOS Gatekeeper treats an invalid
+      # signature as a hard "<App> is damaged" block with no user bypass,
+      # which is a different (and worse) failure mode than an unsigned
+      # binary -- clearing the quarantine flag (xattr -cr) does not fix it,
+      # since the problem isn't quarantine. Re-signing ad-hoc (no paid
+      # Apple Developer account needed) after macdeployqt fixes the
+      # signature itself; downloaders may still see an "unidentified
+      # developer" prompt, but that one has a right-click-Open bypass
+      # instead of being a dead end.
+      - name: Re-sign app bundle after macdeployqt (macOS)
+        if: matrix.os == 'macos-latest'
+        run: codesign --force --deep --sign - dist/PacketVCR.app
+
       - name: Bundle Qt runtime (Linux)
         if: matrix.os == 'ubuntu-22.04'
         run: |
