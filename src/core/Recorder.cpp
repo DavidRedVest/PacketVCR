@@ -52,6 +52,14 @@ bool Recorder::start(const RecorderConfig& config) {
     packetCount_.store(0);
     byteCount_.store(0);
     running_.store(true);
+    // A previous run that exited early on its own (setup failure: bad
+    // output path, bind failure, ...) sets running_ = false without
+    // anyone joining thread_, so it's still joinable here even though the
+    // OS thread has already exited. Reassigning std::thread over a
+    // joinable one calls std::terminate(), so reap it first.
+    if (thread_.joinable()) {
+        thread_.join();
+    }
     thread_ = std::thread(&Recorder::runLoop, this, config);
     return true;
 }

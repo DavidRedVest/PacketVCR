@@ -74,6 +74,7 @@ private slots:
     void noCumulativeDriftOverManyPackets();
     void pauseResumeShiftsTimingWithoutLoss();
     void speedMultiplierScalesTotalDuration();
+    void restartAfterNaturalCompletionDoesNotCrash();
 };
 
 void TestPlayerTiming::noCumulativeDriftOverManyPackets() {
@@ -212,6 +213,51 @@ void TestPlayerTiming::speedMultiplierScalesTotalDuration() {
     // local dev run would need: CI scheduling jitter, not drift.
     QVERIFY2(std::llabs(actualTotalMs - expectedTotalMs) < 150,
              qPrintable(QString("expected ~%1ms at 2x, got %2ms").arg(expectedTotalMs).arg(actualTotalMs)));
+
+    QFile::remove(path);
+}
+
+void TestPlayerTiming::restartAfterNaturalCompletionDoesNotCrash() {
+    // Regression test: a Player that finishes playback on its own (no
+    // loop, reaches end of file) sets running_ = false from its own worker
+    // thread without anyone joining that thread. A second start() call
+    // used to reassign std::thread over that still-joinable handle, which
+    // calls std::terminate() -- exactly the crash a second "Play" click
+    // hit in the GUI after a file finished playing once.
+    const QString path = tempPcapPath();
+    const int count = 3;
+    const int stepMs = 5;
+    writeTestPcap(path, count, stepMs);
+
+    const uint16_t port = 19004;
+    core::Player player;
+    core::PlayerConfig config;
+    config.inputPath = path.toStdString();
+    config.destIp = kLoopbackIp;
+    config.destPort = port;
+    config.speedMultiplier = 1.0;
+
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        std::thread receiver;
+        std::vector<ReceivedPacket> received;
+        receiver = std::thread([&] { received = receivePackets(port, count, 5000); });
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+        QVERIFY(player.start(config));
+
+        receiver.join();
+        QCOMPARE(static_cast<int>(received.size()), count);
+
+        // Wait for the worker thread to notice it reached the end of the
+        // (non-looping) file and flip running_ back to false on its own,
+        // without us ever calling stop() -- that's the natural-completion
+        // path that used to leave the thread unjoined.
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(2000);
+        while (player.isRunning() && std::chrono::steady_clock::now() < deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+        QVERIFY(!player.isRunning());
+    }
 
     QFile::remove(path);
 }

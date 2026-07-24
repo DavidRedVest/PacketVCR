@@ -68,6 +68,14 @@ bool Player::start(const PlayerConfig& config) {
     bytesSent_.store(0);
     currentIndex_.store(0);
     running_.store(true);
+    // A previous run that finished on its own (playback reached the end,
+    // no loop) sets running_ = false without anyone joining thread_, so
+    // it's still joinable here even though the OS thread has already
+    // exited. Reassigning std::thread over a joinable one calls
+    // std::terminate(), so reap it first.
+    if (thread_.joinable()) {
+        thread_.join();
+    }
     thread_ = std::thread(&Player::runLoop, this, config);
     return true;
 }
